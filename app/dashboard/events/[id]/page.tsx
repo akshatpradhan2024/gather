@@ -47,6 +47,11 @@ export default function EventManagePage() {
   const [editDate, setEditDate] = useState('')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [showBlastModal, setShowBlastModal] = useState(false)
+  const [blastMessage, setBlastMessage] = useState('')
+  const [blastStatuses, setBlastStatuses] = useState<string[]>(['going', 'maybe'])
+  const [blasting, setBlasting] = useState(false)
+  const [blastResult, setBlastResult] = useState<{ sent: number; failed: number } | null>(null)
 
   const fetchData = useCallback(async () => {
     const res = await fetch(`/api/events/${id}`)
@@ -102,6 +107,20 @@ export default function EventManagePage() {
       setEditMode(false)
       setSaving(false)
     }
+  }
+
+  async function handleBlast() {
+    if (!blastMessage.trim() || blastStatuses.length === 0) return
+    setBlasting(true)
+    setBlastResult(null)
+    const res = await fetch(`/api/events/${id}/blast`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: blastMessage, statuses: blastStatuses }),
+    })
+    const data = await res.json()
+    setBlastResult(data)
+    setBlasting(false)
   }
 
   async function handleCancel() {
@@ -162,6 +181,12 @@ export default function EventManagePage() {
                     Edit
                   </button>
                 ) : null}
+                <button
+                  onClick={() => { setShowBlastModal(true); setBlastResult(null) }}
+                  className="text-sm bg-violet-600 hover:bg-violet-500 text-white px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  📣 Text Blast
+                </button>
                 <button
                   onClick={() => setShowCancelModal(true)}
                   className="text-sm text-red-400 hover:text-red-300 transition-colors"
@@ -368,6 +393,77 @@ export default function EventManagePage() {
           )}
         </div>
       </main>
+
+      {/* Text blast modal */}
+      {showBlastModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 px-4">
+          <div className="bg-[#1a1a2e] border border-white/10 rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <h2 className="text-white font-bold text-lg mb-1">📣 Text Blast</h2>
+            <p className="text-white/40 text-sm mb-5">Send a custom SMS to your guests. Use <code className="text-violet-400">{'{name}'}</code> to personalize.</p>
+
+            <div className="mb-4">
+              <label className="block text-xs text-white/50 mb-2 font-medium uppercase tracking-wider">Send to</label>
+              <div className="flex gap-2">
+                {[
+                  { value: 'going', label: `Going (${counts.going})`, color: 'green' },
+                  { value: 'maybe', label: `Maybe (${counts.maybe})`, color: 'yellow' },
+                ].map(({ value, label, color }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setBlastStatuses(prev =>
+                      prev.includes(value) ? prev.filter(s => s !== value) : [...prev, value]
+                    )}
+                    className={`flex-1 py-2 rounded-xl text-sm font-medium border-2 transition-all ${
+                      blastStatuses.includes(value)
+                        ? color === 'green'
+                          ? 'bg-green-500/20 border-green-500 text-green-300'
+                          : 'bg-yellow-500/20 border-yellow-500 text-yellow-300'
+                        : 'bg-white/5 border-white/10 text-white/40'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-xs text-white/50 mb-2 font-medium uppercase tracking-wider">Message</label>
+              <textarea
+                value={blastMessage}
+                onChange={(e) => setBlastMessage(e.target.value)}
+                placeholder={`Hey {name}! Quick update about ${event.title}...`}
+                rows={4}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-violet-500 transition-all resize-none text-sm"
+              />
+              <p className="text-white/30 text-xs mt-1">{blastMessage.length} chars · ~{Math.ceil(blastMessage.length / 160)} SMS segment{Math.ceil(blastMessage.length / 160) !== 1 ? 's' : ''}</p>
+            </div>
+
+            {blastResult && (
+              <div className={`mb-4 px-4 py-3 rounded-xl text-sm ${blastResult.failed > 0 ? 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-300' : 'bg-green-500/10 border border-green-500/20 text-green-300'}`}>
+                ✓ Sent {blastResult.sent} messages{blastResult.failed > 0 ? `, ${blastResult.failed} failed` : ''}
+              </div>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleBlast}
+                disabled={blasting || !blastMessage.trim() || blastStatuses.length === 0}
+                className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:bg-white/10 disabled:text-white/30 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
+              >
+                {blasting ? 'Sending...' : `Send to ${rsvps.filter(r => blastStatuses.includes(r.status)).length} guests`}
+              </button>
+              <button
+                onClick={() => { setShowBlastModal(false); setBlastMessage(''); setBlastResult(null) }}
+                className="flex-1 bg-white/10 hover:bg-white/15 text-white py-3 rounded-xl transition-colors text-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cancel confirmation modal */}
       {showCancelModal && (
